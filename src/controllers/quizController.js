@@ -10,7 +10,8 @@ const listQuizzes = async (req, res, next) => {
     const { page, limit, skip } = paginate(req.query.page, req.query.limit);
     const { hskLevel, search, generatedByAI } = req.query;
 
-    const filter = { isPublished: true };
+    const isAdmin = req.user && (req.user.role === 'admin' || req.user.role === 'superadmin');
+    const filter = isAdmin ? {} : { isPublished: true };
     if (hskLevel) filter.hskLevel = Number(hskLevel);
     if (generatedByAI !== undefined) filter.generatedByAI = generatedByAI === 'true';
     if (search) filter.$text = { $search: search };

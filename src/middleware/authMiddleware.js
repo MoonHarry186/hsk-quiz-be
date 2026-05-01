@@ -52,6 +52,10 @@ const tryAuthenticate = async (req, res, next) => {
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) return next(new AuthError());
+    
+    // Always allow superadmin
+    if (req.user.role === 'superadmin') return next();
+    
     if (!roles.includes(req.user.role)) {
       return next(new ForbiddenError('Insufficient permissions'));
     }

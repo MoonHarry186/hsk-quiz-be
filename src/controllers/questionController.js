@@ -1,7 +1,7 @@
 const Question = require('../models/Question');
 const Quiz = require('../models/Quiz');
 const { NotFoundError } = require('../utils/errors');
-const { successResponse } = require('../utils/helpers');
+const { successResponse, paginate, buildPaginatedResponse } = require('../utils/helpers');
 
 const createQuestion = async (req, res, next) => {
   try {
@@ -76,4 +76,34 @@ const deleteQuestion = async (req, res, next) => {
   }
 };
 
-module.exports = { createQuestion, getQuestion, updateQuestion, deleteQuestion };
+const listQuestions = async (req, res, next) => {
+  try {
+    const { page, limit, skip } = paginate(req.query.page, req.query.limit);
+    const { hskLevel, questionType, search } = req.query;
+    const query = {};
+
+    if (hskLevel) query.hskLevel = parseInt(hskLevel);
+    if (questionType) query.questionType = questionType;
+    if (search) {
+      query.content = { $regex: search, $options: 'i' };
+    }
+
+    const [questions, total] = await Promise.all([
+      Question.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Question.countDocuments(query),
+    ]);
+
+    return successResponse(
+      res,
+      buildPaginatedResponse(questions, total, page, limit),
+      'Questions retrieved'
+    );
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { createQuestion, getQuestion, updateQuestion, deleteQuestion, listQuestions };
