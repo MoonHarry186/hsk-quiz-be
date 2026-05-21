@@ -32,53 +32,75 @@ const gradeAnswer = (question, userAnswer) => {
 
 const gradeAttempt = (questions, answers, quiz) => {
   const questionMap = new Map(questions.map((q) => [q._id.toString(), q]));
-  let totalScore = 0;
+  const answerMap = new Map();
+  (answers || []).forEach((answer) => {
+    const raw = typeof answer.toObject === 'function' ? answer.toObject() : answer;
+    if (raw.questionId) answerMap.set(raw.questionId.toString(), raw);
+  });
+
+  let earnedScore = 0;
   let maxScore = 0;
   let correctAnswers = 0;
   let wrongAnswers = 0;
+  let answeredQuestions = 0;
 
-  const gradedAnswers = answers
-    .map((answer) => {
-      const raw = typeof answer.toObject === 'function' ? answer.toObject() : answer;
-      const questionId = raw.questionId;
-      if (!questionId) return null;
+  const gradedAnswers = questions.map((question) => {
+    const questionId = question._id;
+    const raw = answerMap.get(questionId.toString());
+    const userAnswer = raw ? raw.userAnswer : null;
+    maxScore += question.points || 1;
 
-      const question = questionMap.get(questionId.toString());
-      if (!question) {
-        return { questionId, userAnswer: raw.userAnswer, timeSpent: raw.timeSpent,
-          submittedAt: raw.submittedAt || new Date(), isCorrect: false, pointsEarned: 0, correctAnswer: null, explanation: '' };
-      }
+    const { isCorrect, correctAnswer, pointsEarned } = gradeAnswer(question, userAnswer);
 
-      maxScore += question.points || 1;
-      const { isCorrect, correctAnswer, pointsEarned } = gradeAnswer(question, raw.userAnswer);
+    if (raw) answeredQuestions += 1;
+    if (isCorrect) {
+      correctAnswers += 1;
+      earnedScore += pointsEarned;
+    } else {
+      wrongAnswers += 1;
+    }
 
-      if (isCorrect) { correctAnswers += 1; totalScore += pointsEarned; }
-      else { wrongAnswers += 1; }
+    return {
+      questionId,
+      userAnswer,
+      timeSpent: raw?.timeSpent || 0,
+      submittedAt: raw?.submittedAt || new Date(),
+      isCorrect,
+      pointsEarned,
+      correctAnswer,
+      explanation: question.explanation || '',
+    };
+  });
 
-      return {
-        questionId,
-        userAnswer: raw.userAnswer,
-        timeSpent: raw.timeSpent || 0,
-        submittedAt: raw.submittedAt || new Date(),
-        isCorrect,
-        pointsEarned,
-        correctAnswer,
-        explanation: question.explanation || '',
-      };
-    })
-    .filter(Boolean);
+  (answers || [])
+    .map((answer) => (typeof answer.toObject === 'function' ? answer.toObject() : answer))
+    .filter((answer) => answer.questionId && !questionMap.has(answer.questionId.toString()))
+    .forEach((answer) => {
+      gradedAnswers.push({
+        questionId: answer.questionId,
+        userAnswer: answer.userAnswer,
+        timeSpent: answer.timeSpent || 0,
+        submittedAt: answer.submittedAt || new Date(),
+        isCorrect: false,
+        pointsEarned: 0,
+        correctAnswer: null,
+        explanation: '',
+      });
+    });
 
-  const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
+  const percentage = maxScore > 0 ? Math.round((earnedScore / maxScore) * 100) : 0;
   const passed = percentage >= (quiz.passingScore || 70);
 
   return {
     gradedAnswers,
-    totalScore,
+    totalScore: percentage,
+    earnedScore,
     maxScore,
     percentage,
     passed,
     correctAnswers,
     wrongAnswers,
+    answeredQuestions,
   };
 };
 

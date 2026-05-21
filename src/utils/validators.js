@@ -77,6 +77,18 @@ const submitAnswerSchema = Joi.object({
   timeSpent: Joi.number().min(0).optional(),
 });
 
+const submitQuizSchema = Joi.object({
+  quizId: Joi.string().required(),
+  answers: Joi.array()
+    .items(
+      Joi.object({
+        questionId: Joi.string().required(),
+        userAnswer: Joi.alternatives().try(Joi.number(), Joi.string(), Joi.array()).required(),
+      })
+    )
+    .default([]),
+});
+
 const validate = (schema) => (req, res, next) => {
   const { error, value } = schema.validate(req.body, { abortEarly: false, stripUnknown: true });
   if (error) {
@@ -99,4 +111,5 @@ module.exports = {
   generateQuizSchema,
   createQuestionSchema,
   submitAnswerSchema,
+  submitQuizSchema,
 };

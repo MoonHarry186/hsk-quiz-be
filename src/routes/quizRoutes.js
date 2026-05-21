@@ -19,6 +19,7 @@ const {
   validate,
   createQuizSchema,
   generateQuizSchema,
+  submitQuizSchema,
 } = require("../utils/validators");
 
 router.get("/", tryAuthenticate, listQuizzes);
@@ -35,12 +36,11 @@ router.post(
   validate(createQuizSchema),
   createQuiz,
 );
-router.post("/submit", authenticate, submitQuiz);
+router.post("/submit", authenticate, validate(submitQuizSchema), submitQuiz);
 router.get("/attempts", authenticate, getAttempts);
 router.get("/attempts/:attemptId", authenticate, getAttempt);
-router.get("/:quizId", getQuiz);
+router.get("/:quizId", tryAuthenticate, getQuiz);
 router.put("/:quizId", authenticate, authorize("admin", "teacher"), updateQuiz);
 router.delete("/:quizId", authenticate, authorize("admin"), deleteQuiz);
 
 module.exports = router;
-

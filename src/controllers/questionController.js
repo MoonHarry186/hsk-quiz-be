@@ -47,9 +47,26 @@ const getQuestion = async (req, res, next) => {
 
 const updateQuestion = async (req, res, next) => {
   try {
+    const allowedFields = [
+      'content',
+      'questionType',
+      'hskLevel',
+      'multipleChoice',
+      'fillBlank',
+      'explanation',
+      'points',
+      'topics',
+      'difficulty',
+    ];
+    const update = Object.fromEntries(
+      allowedFields
+        .filter((field) => req.body[field] !== undefined)
+        .map((field) => [field, req.body[field]])
+    );
+
     const question = await Question.findByIdAndUpdate(
       req.params.questionId,
-      req.body,
+      update,
       { new: true, runValidators: true }
     );
     if (!question) throw new NotFoundError('Question not found');

@@ -11,25 +11,32 @@ const generateQuestions = async ({ hskLevel, numberOfQuestions, topics, question
     topics && topics.length > 0 ? `Focus on these topics: ${topics.join(', ')}.` : '';
   const typesStr = questionTypes.join(', ');
 
-  const prompt = `Generate ${numberOfQuestions} HSK Level ${hskLevel} Chinese learning questions.
+  const prompt = `Generate ${numberOfQuestions} HSK Level ${hskLevel} Chinese learning questions for Vietnamese learners.
 ${topicsStr}
 Question types to include: ${typesStr}
+
+Language rules:
+- All user-facing instructional text must be in Vietnamese.
+- Question content, answer option translations, hints, and explanations must use Vietnamese.
+- Chinese characters and pinyin are allowed where they are the learning target.
+- Do not use English unless the topic explicitly requires an English word.
 
 For each question:
 - Create clear, educational content appropriate for HSK level ${hskLevel}
 - For multiple_choice: provide exactly 4 options (A, B, C, D)
 - For fill_blank: provide the sentence with ___ as placeholder and the correct word(s)
 - Include the correct answer
-- Add explanation in both English and Chinese
+- Write the explanation in Vietnamese. Do not write explanations in English.
+- Chinese words, characters, pinyin, and translations may appear inside the explanation only when needed to teach the answer.
 
 Return ONLY a valid JSON array, no markdown formatting, no code blocks:
 [
   {
-    "content": "Question text",
+    "content": "Nội dung câu hỏi bằng tiếng Việt, có thể kèm tiếng Trung cần học",
     "type": "multiple_choice",
-    "options": ["option1", "option2", "option3", "option4"],
+    "options": ["Đáp án A bằng tiếng Việt", "Đáp án B bằng tiếng Việt", "Đáp án C bằng tiếng Việt", "Đáp án D bằng tiếng Việt"],
     "correctAnswer": 0,
-    "explanation": "Why this is correct"
+    "explanation": "Giải thích ngắn gọn bằng tiếng Việt vì sao đáp án này đúng"
   }
 ]`;
 
@@ -68,9 +75,7 @@ Return ONLY a valid JSON array, no markdown formatting, no code blocks:
   return parsed.map((item) => {
     const questionType = item.type || questionTypes[0];
 
-    const explanation = typeof item.explanation === 'object'
-      ? `${item.explanation.en || ''}\n${item.explanation.zh || ''}`.trim()
-      : String(item.explanation || '');
+    const explanation = normalizeExplanation(item.explanation);
 
     const result = {
       content: item.content || '',
@@ -96,6 +101,20 @@ Return ONLY a valid JSON array, no markdown formatting, no code blocks:
 
     return result;
   });
+};
+
+const normalizeExplanation = (explanation) => {
+  if (typeof explanation === 'object' && explanation !== null) {
+    const vietnamese = explanation.vi || explanation.vietnamese;
+    if (vietnamese) return String(vietnamese).trim();
+
+    return Object.values(explanation)
+      .filter((value) => typeof value === 'string' && value.trim())
+      .join('\n')
+      .trim();
+  }
+
+  return String(explanation || '').trim();
 };
 
 module.exports = { generateQuestions };

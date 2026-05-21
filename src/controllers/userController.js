@@ -1,5 +1,5 @@
 const User = require("../models/User");
-const { NotFoundError } = require("../utils/errors");
+const { ForbiddenError, NotFoundError, ValidationError } = require("../utils/errors");
 const {
   successResponse,
   paginate,
@@ -59,13 +59,28 @@ const listUsers = async (req, res, next) => {
 const updateUser = async (req, res, next) => {
   try {
     const { role, isActive, hskLevel } = req.body;
-    const user = await User.findByIdAndUpdate(
-      req.params.userId,
-      { role, isActive, hskLevel },
-      { new: true, runValidators: true },
-    );
+    const user = await User.findById(req.params.userId);
     if (!user) throw new NotFoundError("User not found");
-    return successResponse(res, { user }, "User updated");
+
+    const isSuperadmin = req.user.role === "superadmin";
+    const isSelf = user._id.toString() === req.user._id.toString();
+    if ((user.role === "superadmin" || role === "superadmin") && !isSuperadmin) {
+      throw new ForbiddenError("Only superadmins can modify superadmin access");
+    }
+    if (isSelf && isActive === false) {
+      throw new ValidationError("You cannot deactivate your own account");
+    }
+
+    const update = {};
+    if (role !== undefined) update.role = role;
+    if (isActive !== undefined) update.isActive = isActive;
+    if (hskLevel !== undefined) update.hskLevel = hskLevel;
+
+    const updatedUser = await User.findByIdAndUpdate(req.params.userId, update, {
+      new: true,
+      runValidators: true,
+    });
+    return successResponse(res, { user: updatedUser }, "User updated");
   } catch (err) {
     next(err);
   }
@@ -73,8 +88,16 @@ const updateUser = async (req, res, next) => {
 
 const deleteUser = async (req, res, next) => {
   try {
-    const user = await User.findByIdAndDelete(req.params.userId);
+    const user = await User.findById(req.params.userId);
     if (!user) throw new NotFoundError("User not found");
+
+    const isSelf = user._id.toString() === req.user._id.toString();
+    if (isSelf) throw new ValidationError("You cannot delete your own account");
+    if (user.role === "superadmin" && req.user.role !== "superadmin") {
+      throw new ForbiddenError("Only superadmins can delete superadmin accounts");
+    }
+
+    await user.deleteOne();
     return successResponse(res, null, "User deleted");
   } catch (err) {
     next(err);
@@ -82,4 +105,3 @@ const deleteUser = async (req, res, next) => {
 };
 
 module.exports = { listUsers, updateUser, deleteUser };
-

@@ -1,9 +1,19 @@
 const Quiz = require('../models/Quiz');
 const Question = require('../models/Question');
 const Attempt = require('../models/Attempt');
+const Result = require('../models/Result');
 const { generateQuestions } = require('../services/aiService');
-const { NotFoundError, ForbiddenError } = require('../utils/errors');
+const { gradeAttempt, buildAnalysis } = require('../services/gradingService');
+const { updateStatistics } = require('../services/statisticsService');
+const { NotFoundError, ForbiddenError, ValidationError } = require('../utils/errors');
 const { successResponse, paginate, buildPaginatedResponse, stripAnswers } = require('../utils/helpers');
+
+const canManageQuiz = (user, quiz) => {
+  if (!user) return false;
+  if (user.role === 'admin' || user.role === 'superadmin') return true;
+  const createdBy = quiz.createdBy?._id || quiz.createdBy;
+  return createdBy?.toString() === user._id.toString();
+};
 
 const listQuizzes = async (req, res, next) => {
   try {
@@ -11,7 +21,12 @@ const listQuizzes = async (req, res, next) => {
     const { hskLevel, search, generatedByAI } = req.query;
 
     const isAdmin = req.user && (req.user.role === 'admin' || req.user.role === 'superadmin');
-    const filter = isAdmin ? {} : { isPublished: true };
+    const isTeacher = req.user && req.user.role === 'teacher';
+    const filter = isAdmin
+      ? {}
+      : isTeacher
+        ? { $or: [{ isPublished: true }, { createdBy: req.user._id }] }
+        : { isPublished: true };
     if (hskLevel) filter.hskLevel = Number(hskLevel);
     if (generatedByAI !== undefined) filter.generatedByAI = generatedByAI === 'true';
     if (search) filter.$text = { $search: search };
@@ -114,8 +129,13 @@ const getQuiz = async (req, res, next) => {
   try {
     const quiz = await Quiz.findById(req.params.quizId).populate('createdBy', 'username fullName');
     if (!quiz) throw new NotFoundError('Quiz not found');
+    if (!quiz.isPublished && !canManageQuiz(req.user, quiz)) {
+      throw new ForbiddenError('You do not have permission to view this quiz');
+    }
 
     const questions = await Question.find({ quizId: quiz._id });
+    const order = new Map(quiz.questionIds.map((id, index) => [id.toString(), index]));
+    questions.sort((a, b) => (order.get(a._id.toString()) ?? 0) - (order.get(b._id.toString()) ?? 0));
     const safeQuestions = questions.map(stripAnswers);
 
     return successResponse(res, { quiz, questions: safeQuestions }, 'Quiz retrieved');
@@ -129,12 +149,15 @@ const updateQuiz = async (req, res, next) => {
     const quiz = await Quiz.findById(req.params.quizId);
     if (!quiz) throw new NotFoundError('Quiz not found');
 
-    const isAdmin = req.user.role === 'admin';
-    const isOwner = quiz.createdBy.toString() === req.user._id.toString();
+    if (!canManageQuiz(req.user, quiz)) throw new ForbiddenError();
 
-    if (!isAdmin && !isOwner) throw new ForbiddenError();
-
-    const updatedQuiz = await Quiz.findByIdAndUpdate(req.params.quizId, req.body, {
+    const allowedFields = ['title', 'description', 'hskLevel', 'duration', 'passingScore', 'isPublished'];
+    const update = Object.fromEntries(
+      allowedFields
+        .filter((field) => req.body[field] !== undefined)
+        .map((field) => [field, req.body[field]])
+    );
+    const updatedQuiz = await Quiz.findByIdAndUpdate(req.params.quizId, update, {
       new: true,
       runValidators: true,
     });
@@ -168,58 +191,67 @@ const submitQuiz = async (req, res, next) => {
     const questions = await Question.find({ quizId: quiz._id });
     const questionMap = new Map(questions.map((q) => [q._id.toString(), q]));
 
-    let correctAnswersCount = 0;
-    const processedAnswers = answers.map((ans) => {
-      const question = questionMap.get(ans.questionId);
-      if (!question) return { ...ans, isCorrect: false };
-
-      let isCorrect = false;
-      let correctAnswerText = '';
-
-      if (question.questionType === 'multiple_choice') {
-        isCorrect = question.multipleChoice.correctAnswer === ans.userAnswer;
-        correctAnswerText = question.multipleChoice.options[question.multipleChoice.correctAnswer];
-      } else if (question.questionType === 'fill_blank') {
-        // Simple string comparison for now
-        isCorrect = question.fillBlank.blanks[0].toLowerCase().trim() === ans.userAnswer.toLowerCase().trim();
-        correctAnswerText = question.fillBlank.blanks[0];
+    answers.forEach((answer) => {
+      if (!questionMap.has(answer.questionId)) {
+        throw new ValidationError('Answer contains a question that does not belong to this quiz');
       }
-
-      if (isCorrect) correctAnswersCount++;
-
-      return {
-        questionId: question._id,
-        userAnswer: ans.userAnswer,
-        isCorrect,
-        correctAnswer: correctAnswerText,
-        explanation: question.explanation,
-        pointsEarned: isCorrect ? question.points : 0,
-      };
     });
 
-    const totalScore = processedAnswers.reduce((sum, ans) => sum + ans.pointsEarned, 0);
-    const passedStatus = totalScore >= quiz.passingScore;
+    const { gradedAnswers, totalScore, percentage, passed, correctAnswers, wrongAnswers, answeredQuestions } =
+      gradeAttempt(questions, answers, quiz);
 
     const attempt = await Attempt.create({
       userId: req.user._id,
       quizId: quiz._id,
       submittedAt: new Date(),
       totalScore,
-      passedStatus,
+      passedStatus: passed,
       status: 'submitted',
-      answers: processedAnswers,
+      answers: gradedAnswers,
       summary: {
         totalQuestions: questions.length,
-        answeredQuestions: answers.length,
-        correctAnswers: correctAnswersCount,
-        wrongAnswers: questions.length - correctAnswersCount,
-        percentage: (correctAnswersCount / questions.length) * 100,
+        answeredQuestions,
+        correctAnswers,
+        wrongAnswers,
+        percentage,
       },
     });
 
+    const analysis = buildAnalysis(questions, gradedAnswers);
+    const resultAnswers = gradedAnswers.map((answer) => {
+      const question = questions.find((q) => q._id.toString() === answer.questionId.toString());
+      return {
+        questionId: answer.questionId,
+        questionContent: question ? question.content : '',
+        questionType: question ? question.questionType : '',
+        userAnswer: answer.userAnswer,
+        correctAnswer: answer.correctAnswer,
+        isCorrect: answer.isCorrect,
+        pointsEarned: answer.pointsEarned,
+        explanation: answer.explanation,
+        timeSpent: answer.timeSpent,
+      };
+    });
+
+    const result = await Result.create({
+      attemptId: attempt._id,
+      userId: req.user._id,
+      quizId: quiz._id,
+      score: totalScore,
+      percentage,
+      passed,
+      timeSpent: 0,
+      correctAnswers,
+      wrongAnswers,
+      analysis,
+      answers: resultAnswers,
+    });
+
+    await updateStatistics(req.user._id, { ...result.toObject(), answers: resultAnswers }, quiz);
+
     // Update quiz stats
     quiz.totalAttempts += 1;
-    quiz.averageScore = (quiz.averageScore * (quiz.totalAttempts - 1) + totalScore) / quiz.totalAttempts;
+    quiz.averageScore = Math.round((quiz.averageScore * (quiz.totalAttempts - 1) + totalScore) / quiz.totalAttempts);
     await quiz.save();
 
     return successResponse(res, { attempt }, 'Quiz submitted successfully');

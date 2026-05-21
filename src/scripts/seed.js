@@ -21,9 +21,12 @@ const seedData = async () => {
     // 2. Find or create a superadmin for assignment
     let admin = await User.findOne({ role: 'superadmin' });
     if (!admin) {
+      if (!process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) {
+        throw new Error('ADMIN_EMAIL and ADMIN_PASSWORD are required before seeding a superadmin');
+      }
       admin = await User.create({
-        email: process.env.ADMIN_EMAIL || 'admin@hskquiz.com',
-        password: process.env.ADMIN_PASSWORD || 'admin123456',
+        email: process.env.ADMIN_EMAIL,
+        password: process.env.ADMIN_PASSWORD,
         username: 'superadmin',
         fullName: 'Super Administrator',
         role: 'superadmin',

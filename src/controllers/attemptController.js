@@ -48,6 +48,9 @@ const submitAnswer = async (req, res, next) => {
 
     const question = await Question.findById(questionId);
     if (!question) throw new NotFoundError('Question not found');
+    if (question.quizId.toString() !== attempt.quizId.toString()) {
+      throw new ValidationError('Question does not belong to this attempt quiz');
+    }
 
     const existingIndex = attempt.answers.findIndex(
       (a) => a.questionId.toString() === questionId
@@ -88,7 +91,7 @@ const submitAttempt = async (req, res, next) => {
     const submittedAt = new Date();
     const timeSpentSeconds = Math.round((submittedAt - attempt.startedAt) / 1000);
 
-    const { gradedAnswers, totalScore, percentage, passed, correctAnswers, wrongAnswers } =
+    const { gradedAnswers, totalScore, percentage, passed, correctAnswers, wrongAnswers, answeredQuestions } =
       gradeAttempt(questions, attempt.answers, quiz);
 
     attempt.answers = gradedAnswers;
@@ -98,7 +101,7 @@ const submitAttempt = async (req, res, next) => {
     attempt.submittedAt = submittedAt;
     attempt.summary = {
       totalQuestions: questions.length,
-      answeredQuestions: attempt.answers.length,
+      answeredQuestions,
       correctAnswers,
       wrongAnswers,
       percentage,

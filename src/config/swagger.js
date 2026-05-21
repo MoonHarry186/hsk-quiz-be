@@ -151,13 +151,13 @@ const options = {
           required: ['quizId', 'content', 'questionType', 'hskLevel'],
           properties: {
             quizId: { type: 'string', example: '6639a1f3e2b4c1234567890b' },
-            content: { type: 'string', example: 'What is 学生 in English?' },
+            content: { type: 'string', example: '“学生” nghĩa là gì trong tiếng Việt?' },
             questionType: { type: 'string', enum: ['multiple_choice', 'fill_blank', 'essay'], example: 'multiple_choice' },
             hskLevel: { type: 'integer', enum: [1, 2, 3, 4, 5, 6], example: 2 },
             multipleChoice: {
               type: 'object',
               properties: {
-                options: { type: 'array', items: { type: 'string' }, example: ['Student', 'Teacher', 'Book', 'Pen'] },
+                options: { type: 'array', items: { type: 'string' }, example: ['Học sinh', 'Giáo viên', 'Sách', 'Bút'] },
                 correctAnswer: { type: 'integer', description: 'Index of correct option', example: 0 },
               },
             },
@@ -169,7 +169,7 @@ const options = {
                 hints: { type: 'array', items: { type: 'string' } },
               },
             },
-            explanation: { type: 'string', example: '学生 means student in English.' },
+            explanation: { type: 'string', example: '“学生” nghĩa là học sinh, dùng để chỉ người đang đi học.' },
             points: { type: 'number', minimum: 0.5, maximum: 10, default: 1, example: 1 },
             topics: { type: 'array', items: { type: 'string' }, example: ['education'] },
           },

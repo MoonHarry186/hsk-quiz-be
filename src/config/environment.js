@@ -9,6 +9,8 @@ const required = (name) => {
 };
 
 const optional = (name, defaultValue) => process.env[name] || defaultValue;
+const productionRequired = (name, defaultValue) =>
+  process.env.NODE_ENV === 'production' ? required(name) : optional(name, defaultValue);
 
 module.exports = {
   PORT: optional('PORT', '3000'),
@@ -17,7 +19,7 @@ module.exports = {
   JWT_SECRET: required('JWT_SECRET'),
   GEMINI_API_KEY: required('GEMINI_API_KEY'),
   ADMIN_EMAIL: optional('ADMIN_EMAIL', 'admin@hskquiz.com'),
-  ADMIN_PASSWORD: optional('ADMIN_PASSWORD', 'Admin@123456'),
+  ADMIN_PASSWORD: productionRequired('ADMIN_PASSWORD', 'Admin@123456'),
   CORS_ORIGIN: optional('CORS_ORIGIN', 'http://localhost:3001'),
   LOG_LEVEL: optional('LOG_LEVEL', 'dev'),
 };

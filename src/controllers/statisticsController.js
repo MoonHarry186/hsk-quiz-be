@@ -32,36 +32,34 @@ const getStatistics = async (req, res, next) => {
       const attempts = await Attempt.find({
         userId: req.user._id,
         submittedAt: { $gte: startDate },
-        status: 'submitted',
+        status: { $in: ['submitted', 'graded'] },
       });
 
-      if (attempts.length > 0) {
-        const totalAttempts = attempts.length;
-        const totalPassedQuizzes = attempts.filter((a) => a.passedStatus).length;
-        const totalScore = attempts.reduce((acc, a) => acc + (a.totalScore || 0), 0);
-        const totalStudyTime = attempts.reduce((acc, a) => acc + (a.summary?.timeSpentSeconds || 0), 0);
+      const totalAttempts = attempts.length;
+      const totalPassedQuizzes = attempts.filter((a) => a.passedStatus).length;
+      const totalScore = attempts.reduce((acc, a) => acc + (a.totalScore || 0), 0);
+      const totalStudyTime = attempts.reduce((acc, a) => acc + (a.summary?.timeSpentSeconds || 0), 0);
 
-        // Get persistent stats for non-period fields
-        const overallStats = await UserStatistics.findOne({ userId: req.user._id });
+      // Get persistent stats for non-period fields
+      const overallStats = await UserStatistics.findOne({ userId: req.user._id });
 
-        stats = {
-          userId: req.user._id,
-          totalAttempts,
-          totalPassedQuizzes,
-          averageScore: Math.round((totalScore / totalAttempts) * 10) / 10,
-          totalStudyTime,
-          levelStatistics: overallStats?.levelStatistics || [],
-          questionTypeStats: overallStats?.questionTypeStats || [],
-          currentStreak: overallStats?.currentStreak || 0,
-          longestStreak: overallStats?.longestStreak || 0,
-          lastActivityDate: overallStats?.lastActivityDate || null,
-          targetLevel: overallStats?.targetLevel || 3,
-          progressPercentage: overallStats?.progressPercentage || 0,
-        };
-      }
+      stats = {
+        userId: req.user._id,
+        totalAttempts,
+        totalPassedQuizzes,
+        averageScore: totalAttempts > 0 ? Math.round((totalScore / totalAttempts) * 10) / 10 : 0,
+        totalStudyTime,
+        levelStatistics: overallStats?.levelStatistics || [],
+        questionTypeStats: overallStats?.questionTypeStats || [],
+        currentStreak: overallStats?.currentStreak || 0,
+        longestStreak: overallStats?.longestStreak || 0,
+        lastActivityDate: overallStats?.lastActivityDate || null,
+        targetLevel: overallStats?.targetLevel || 3,
+        progressPercentage: overallStats?.progressPercentage || 0,
+      };
     }
 
-    // Fallback to overall stats if no period or no attempts in period
+    // Fallback to overall stats if no period was requested
     if (!stats) {
       stats = await UserStatistics.findOne({ userId: req.user._id });
     }
