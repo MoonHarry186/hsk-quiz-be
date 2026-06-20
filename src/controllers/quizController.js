@@ -344,6 +344,12 @@ const submitQuiz = async (req, res, next) => {
     });
 
     const analysis = buildAnalysis(questions, gradedAnswers);
+
+    // ĐÂY RỒI! VÁ LỖI DATABASE ÉP MẢNG RỖNG ĐỂ KHÔNG BỊ CASTERROR
+    if (analysis && analysis.byQuestionType) {
+      analysis.byQuestionType = [];
+    }
+
     const resultAnswers = gradedAnswers.map((answer) => {
       const question = questions.find(
         (q) => q._id.toString() === answer.questionId.toString(),
